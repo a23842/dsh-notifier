@@ -388,8 +388,7 @@ export function apply(ctx, config = {}) {
     presentCall: (args) => ({
       card: 'generic',
       title: 'send_notification',
-      kind: 'send',
-      rawInput: args,
+      rawInput: typeof args?.title === 'string' ? args.title : '',
     }),
     async execute(args) {
       if (typeof args?.title !== 'string' || args.title.trim() === '') {
