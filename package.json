@@ -1,0 +1,42 @@
+{
+  "name": "dsh-notifier",
+  "version": "0.1.0",
+  "description": "DSH 多渠道通知插件：NotifyX / 企业微信应用通知(Webhook) / 企业微信机器人 / 邮件(Resend)，提供 send_notification 工具与设置页。",
+  "license": "MIT",
+  "type": "module",
+  "main": "dsh/index.js",
+  "exports": {
+    ".": "./dsh/index.js",
+    "./dsh": "./dsh/index.js",
+    "./package.json": "./package.json",
+    "./client": "./dsh/client.js"
+  },
+  "files": [
+    "dsh",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [],
+      "platform": "web",
+      "immediately": true
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/schemastery": ">=0",
+    "@deepseek-ai/dsh-settings": ">=0"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": { "optional": true },
+    "@deepseek-ai/schemastery": { "optional": true },
+    "@deepseek-ai/dsh-settings": { "optional": true }
+  }
+}
