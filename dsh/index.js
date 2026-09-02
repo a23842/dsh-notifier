@@ -31,6 +31,7 @@ const SETTINGS_NS = (() => {
 
 const NotifierConfig = z.object({
   enabledNotifiers: z.array(z.string()).default(['notifyx']),
+  notifyOnGoalComplete: z.boolean().default(false),
   notifyxApiKey: z.string().role('secret'),
   webhookUrl: z.string().role('secret'),
   webhookMethod: z.string().default('POST'),
@@ -57,6 +58,7 @@ const NotifierConfig = z.object({
 // nothing.
 const CONFIG_DEFAULTS = {
   enabledNotifiers: ['notifyx'],
+  notifyOnGoalComplete: false,
   webhookMethod: 'POST',
   webhookHeaders: '',
   webhookTemplate: '',
@@ -142,6 +144,7 @@ function normalizeConfig(raw) {
     feishuWebhook: str('feishuWebhook'),
     feishuSecret: str('feishuSecret'),
     feishuAtAll: str('feishuAtAll', 'false'),
+    notifyOnGoalComplete: s.notifyOnGoalComplete === true,
   }
 }
 
@@ -521,4 +524,18 @@ export function apply(ctx, config = {}) {
       }
     })
   }
+
+  // Auto-notify on goal completion: the session event firehose carries a
+  // durable `goal/change` event whose `operation` is 'complete' when a tracked
+  // goal is marked complete. When the user opted in via `notifyOnGoalComplete`,
+  // fan out a notification to every enabled channel (fire-and-forget).
+  ctx.on('session/event', (session, event) => {
+    if (event?.type !== 'goal/change') return
+    const change = event?.data
+    if (!change || change.operation !== 'complete') return
+    const cfg = normalizeConfig(configHandle.value)
+    if (cfg.notifyOnGoalComplete !== true) return
+    const objective = typeof change.goal?.objective === 'string' && change.goal.objective ? change.goal.objective : '未命名目标'
+    sendToAllChannels('✅ 任务完成', `目标「${objective}」已完成。`, configHandle.value).catch(() => {})
+  })
 }

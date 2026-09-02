@@ -38,6 +38,7 @@ async function main() {
   let settingsCb = null
   const ctx = {
     get: () => undefined,
+    on: () => () => {},
     inject: (deps, cb) => {
       if (Array.isArray(deps) && deps.includes('settings')) settingsCb = cb
       return () => {}

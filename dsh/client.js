@@ -113,16 +113,6 @@ window.__ModuleLoader__.load({
         borderColor: 'var(--dsw-alias-brand, #667eea)',
         color: 'var(--dsw-alias-brand, #667eea)',
       },
-      badge: {
-        display: 'inline-flex',
-        alignItems: 'center',
-        padding: '2px 8px',
-        borderRadius: '999px',
-        fontSize: '11px',
-        lineHeight: '18px',
-      },
-      badgeOn: { background: 'rgba(46,160,67,0.15)', color: 'var(--dsw-alias-state-success-primary, #2ea043)' },
-      badgeOff: { background: 'rgba(127,127,127,0.15)', color: 'var(--dsw-alias-label-tertiary, rgba(127,127,127,0.8))' },
       btn: {
         padding: '8px 14px',
         fontSize: '13px',
@@ -149,6 +139,7 @@ window.__ModuleLoader__.load({
       const s = (key, fallback) => (typeof v[key] === 'string' ? v[key] : fallback)
       return {
         enabledNotifiers: Array.isArray(v.enabledNotifiers) ? v.enabledNotifiers.filter((id) => CHANNELS.some((c) => c.id === id)) : ['notifyx'],
+        notifyOnGoalComplete: v.notifyOnGoalComplete === true,
         webhookMethod: s('webhookMethod', 'POST'),
         webhookHeaders: s('webhookHeaders', ''),
         webhookTemplate: s('webhookTemplate', ''),
@@ -187,16 +178,7 @@ window.__ModuleLoader__.load({
       return React.createElement(
         'div',
         { style: styles.field },
-        React.createElement(
-          'div',
-          { style: styles.rowBetween },
-          React.createElement('span', { style: styles.fieldLabel }, label),
-          React.createElement(
-            'span',
-            { style: Object.assign({}, styles.badge, configured ? styles.badgeOn : styles.badgeOff) },
-            configured ? '已配置' : '未配置',
-          ),
-        ),
+        React.createElement('span', { style: styles.fieldLabel }, label),
         React.createElement('input', {
           type: 'password',
           style: styles.input,
@@ -258,6 +240,7 @@ window.__ModuleLoader__.load({
           const writes = []
           for (const field of TEXT_FIELDS) writes.push(scope.set(field.key, draft[field.key]))
           writes.push(scope.set('enabledNotifiers', draft.enabledNotifiers))
+          writes.push(scope.set('notifyOnGoalComplete', draft.notifyOnGoalComplete))
           for (const key of SECRET_KEYS) {
             const value = (secretDrafts[key] || '').trim()
             if (value !== '') writes.push(scope.set(key, value))
@@ -286,6 +269,7 @@ window.__ModuleLoader__.load({
           const writes = []
           for (const field of TEXT_FIELDS) writes.push(scope.unset(field.key))
           writes.push(scope.unset('enabledNotifiers'))
+          writes.push(scope.unset('notifyOnGoalComplete'))
           for (const key of SECRET_KEYS) writes.push(scope.unset(key))
           await Promise.all(writes.map((w) => w.catch(() => {})))
           setSaveMsg({ ok: true, text: '已重置为默认值' })
@@ -354,6 +338,22 @@ window.__ModuleLoader__.load({
                   }),
                   channel.label,
                 ),
+              ),
+            ),
+            React.createElement(
+              'div',
+              { style: styles.checkboxRow },
+              React.createElement(
+                'label',
+                { style: Object.assign({}, styles.checkbox, draft.notifyOnGoalComplete ? styles.checkboxOn : {}) },
+                React.createElement('input', {
+                  type: 'checkbox',
+                  checked: draft.notifyOnGoalComplete === true,
+                  disabled: !writable,
+                  onChange: () => setField('notifyOnGoalComplete', !draft.notifyOnGoalComplete),
+                  style: { margin: 0 },
+                }),
+                '目标完成时自动通知',
               ),
             ),
             React.createElement('div', { style: styles.cardHint }, '仅向勾选的渠道发送通知。'),
