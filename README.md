@@ -49,7 +49,7 @@ dsh plugin --profile web add @a23842/dsh-notifier
 
 ## 设置页
 
-DSH Web 设置 → 「通知 / Notifications」页。
+DSH Web 设置 → 「通知」页。
 
 ### 通知设置
 

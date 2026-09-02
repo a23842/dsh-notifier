@@ -1059,7 +1059,7 @@ window.__ModuleLoader__.load({
             name: 'settings.section',
             id: 'notifier',
             order: 25,
-            label: '通知 / Notifications',
+            label: '通知',
             children: { 'settings.notifier.item': { kind: 'list', scope: 'root' } },
           },
           NotifierSection,
