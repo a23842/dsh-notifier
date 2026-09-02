@@ -1,4 +1,4 @@
-# dsh-notifier
+# @a23842/dsh-notifier
 
 DSH 多渠道通知插件：为 DeepSeek Harness 增加 `send_notification` 模型工具和「通知 / Notifications」设置页。
 
@@ -13,16 +13,15 @@ DSH 多渠道通知插件：为 DeepSeek Harness 增加 `send_notification` 模�
 ## 安装
 
 ```bash
-cd /opt/dsh/profiles/web
-dsh plugin add link:/workspace/dsh-notifier
+dsh plugin --profile web add @a23842/dsh-notifier
 ```
 
 或手动：
 
-1. 将本目录软链/安装到 `/opt/dsh/profiles/web/node_modules/dsh-notifier`；
-2. 在 profile 的 `package.json` 增加依赖 `dsh-notifier`，并把 `dsh-notifier` 加入 `dsh.profile.bundles`。
+1. 将本包安装到 `/opt/dsh/profiles/web/node_modules/@a23842/dsh-notifier`；
+2. 在 profile 的 `package.json` 增加依赖 `@a23842/dsh-notifier`，并把它加入 `dsh.profile.bundles`。
 
-`cordis.patch.yml` 提供 bundle patch 行（`id: notifier` → 包名 `dsh-notifier`）。
+`cordis.patch.yml` 提供 bundle patch 行（`id: notifier` → 包名 `@a23842/dsh-notifier`）。
 
 ## 配置
 

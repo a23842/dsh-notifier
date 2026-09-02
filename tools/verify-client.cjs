@@ -82,8 +82,15 @@ console.log('inject    =', JSON.stringify(inject))
 console.log('apply     =', typeof apply)
 
 const expectInject = ['slots', 'settingsScope']
+const expectId = '@a23842/dsh-notifier'
 const injectOk = Array.isArray(inject) && expectInject.every((n) => inject.includes(n))
 const applyOk = typeof apply === 'function'
+const idOk = captured.id === expectId
+
+if (!idOk) {
+  console.error(`FAIL: 模块 id 应为 ${expectId}，实际 ${captured.id}`)
+  process.exit(1)
+}
 
 if (!injectOk) {
   console.error('FAIL: inject 不符合预期，期望包含', expectInject)

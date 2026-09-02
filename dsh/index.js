@@ -13,11 +13,19 @@
 
 import { createHmac } from 'node:crypto'
 import z from '@deepseek-ai/schemastery'
-import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 
 export const inject = ['tools']
 
-const SETTINGS_NS = settingsNamespace('dsh-notifier')
+// Inlined from @deepseek-ai/dsh-settings: the `settingsNamespace` branded-string
+// helper was removed as a named export in dsh 0.1.2-alpha, and a missing ESM
+// named import is a module-evaluation SyntaxError that stops the host from
+// booting at all. The namespace grammar is unchanged (lowercase kebab-case).
+const SETTINGS_NS = (() => {
+  const value = 'dsh-notifier'
+  const pattern = /^[a-z][a-z0-9-]*$/
+  if (!pattern.test(value)) throw new TypeError(`settings namespace "${value}" must match ${String(pattern)}`)
+  return value
+})()
 
 // ---- schema (flat, matching the original form field ids) -------------------
 

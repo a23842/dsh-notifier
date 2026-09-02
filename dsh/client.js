@@ -1,6 +1,6 @@
-// dsh-notifier — browser half (client plugin bundle).
+// @a23842/dsh-notifier — browser half (client plugin bundle).
 //
-// Loaded by dsh-client-modules at /plugins/dsh-notifier/client.js and
+// Loaded by dsh-client-modules at /plugins/@a23842/dsh-notifier/client.js and
 // executed through the lazy-CJS module table (window.__ModuleLoader__.load).
 // Only platform seed words and registered client bundles may be required;
 // `react` is a seed word, so this file needs no externals.
@@ -13,7 +13,7 @@
 // configured from the describe mirror's `secrets` sidecar).
 
 window.__ModuleLoader__.load({
-  id: 'dsh-notifier',
+  id: '@a23842/dsh-notifier',
   factory: (require) => {
     var module = { exports: {} }
     var exports = module.exports

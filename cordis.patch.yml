@@ -4,4 +4,4 @@
 # dsh.client declaration, exactly like the shipped ui-* packages.
 - insert:
     - id: notifier
-      name: 'dsh-notifier'
+      name: '@a23842/dsh-notifier'
