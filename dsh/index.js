@@ -31,41 +31,41 @@ const SETTINGS_NS = (() => {
 
 const NotifierConfig = z.object({
   enabledNotifiers: z.array(z.string()).default(['notifyx']),
-  notifyxApiKey: z.string().role('secret').default(''),
-  webhookUrl: z.string().role('secret').default(''),
+  notifyxApiKey: z.string().role('secret'),
+  webhookUrl: z.string().role('secret'),
   webhookMethod: z.string().default('POST'),
   webhookHeaders: z.string().default(''),
   webhookTemplate: z.string().default(''),
-  wechatbotWebhook: z.string().role('secret').default(''),
+  wechatbotWebhook: z.string().role('secret'),
   wechatbotMsgType: z.string().default('text'),
   wechatbotAtMobiles: z.string().default(''),
   wechatbotAtAll: z.string().default('false'),
-  resendApiKey: z.string().role('secret').default(''),
+  resendApiKey: z.string().role('secret'),
   emailFrom: z.string().default(''),
   emailFromName: z.string().default(''),
   emailTo: z.string().default(''),
-  feishuWebhook: z.string().role('secret').default(''),
-  feishuSecret: z.string().role('secret').default(''),
+  feishuWebhook: z.string().role('secret'),
+  feishuSecret: z.string().role('secret'),
   feishuAtAll: z.string().default('false'),
 })
 
+// Secret fields are intentionally absent from the composition base: a secret
+// that is absent resolves to `undefined`, which dsh-settings' redaction
+// sidecar reports as `set: false` → the settings page shows "未配置". A
+// `.default('')` (or an empty-string base value) would make the resolved
+// secret always defined and thus always "已配置", even when the user set
+// nothing.
 const CONFIG_DEFAULTS = {
   enabledNotifiers: ['notifyx'],
-  notifyxApiKey: '',
-  webhookUrl: '',
   webhookMethod: 'POST',
   webhookHeaders: '',
   webhookTemplate: '',
-  wechatbotWebhook: '',
   wechatbotMsgType: 'text',
   wechatbotAtMobiles: '',
   wechatbotAtAll: 'false',
-  resendApiKey: '',
   emailFrom: '',
   emailFromName: '',
   emailTo: '',
-  feishuWebhook: '',
-  feishuSecret: '',
   feishuAtAll: 'false',
 }
 

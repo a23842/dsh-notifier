@@ -1,6 +1,6 @@
 {
   "name": "@a23842/dsh-notifier",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "DSH 多渠道通知插件：NotifyX / 企业微信应用通知(Webhook) / 企业微信机器人 / 邮件(Resend) / 飞书机器人，提供 send_notification 工具与设置页。",
   "license": "MIT",
   "type": "module",

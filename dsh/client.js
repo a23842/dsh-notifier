@@ -362,7 +362,7 @@ window.__ModuleLoader__.load({
           // NotifyX
           React.createElement(
             'div',
-            { style: styles.card },
+            { style: draft.enabledNotifiers.includes('notifyx') ? styles.card : Object.assign({}, styles.card, { display: 'none' }) },
             React.createElement('div', { style: styles.cardHead },
               React.createElement('span', { style: styles.cardTitle }, 'NotifyX'),
               React.createElement('button', { type: 'button', style: styles.btn, disabled: !writable || testing !== null, onClick: () => testChannel('notifyx') }, testing === 'notifyx' ? '测试中…' : '测试 NotifyX 通知'),
@@ -384,7 +384,7 @@ window.__ModuleLoader__.load({
           // 企业微信应用通知 (webhook)
           React.createElement(
             'div',
-            { style: styles.card },
+            { style: draft.enabledNotifiers.includes('webhook') ? styles.card : Object.assign({}, styles.card, { display: 'none' }) },
             React.createElement('div', { style: styles.cardHead },
               React.createElement('span', { style: styles.cardTitle }, '企业微信应用通知'),
               React.createElement('button', { type: 'button', style: styles.btn, disabled: !writable || testing !== null, onClick: () => testChannel('webhook') }, testing === 'webhook' ? '测试中…' : '测试 Webhook 通知'),
@@ -416,7 +416,7 @@ window.__ModuleLoader__.load({
           // 企业微信机器人
           React.createElement(
             'div',
-            { style: styles.card },
+            { style: draft.enabledNotifiers.includes('wechatbot') ? styles.card : Object.assign({}, styles.card, { display: 'none' }) },
             React.createElement('div', { style: styles.cardHead },
               React.createElement('span', { style: styles.cardTitle }, '企业微信机器人'),
               React.createElement('button', { type: 'button', style: styles.btn, disabled: !writable || testing !== null, onClick: () => testChannel('wechatbot') }, testing === 'wechatbot' ? '测试中…' : '测试机器人通知'),
@@ -450,7 +450,7 @@ window.__ModuleLoader__.load({
           // 邮件通知
           React.createElement(
             'div',
-            { style: styles.card },
+            { style: draft.enabledNotifiers.includes('email') ? styles.card : Object.assign({}, styles.card, { display: 'none' }) },
             React.createElement('div', { style: styles.cardHead },
               React.createElement('span', { style: styles.cardTitle }, '邮件通知'),
               React.createElement('button', { type: 'button', style: styles.btn, disabled: !writable || testing !== null, onClick: () => testChannel('email') }, testing === 'email' ? '测试中…' : '测试邮件通知'),
@@ -480,7 +480,7 @@ window.__ModuleLoader__.load({
           // 飞书机器人
           React.createElement(
             'div',
-            { style: styles.card },
+            { style: draft.enabledNotifiers.includes('feishu') ? styles.card : Object.assign({}, styles.card, { display: 'none' }) },
             React.createElement('div', { style: styles.cardHead },
               React.createElement('span', { style: styles.cardTitle }, '飞书机器人'),
               React.createElement('button', { type: 'button', style: styles.btn, disabled: !writable || testing !== null, onClick: () => testChannel('feishu') }, testing === 'feishu' ? '测试中…' : '测试飞书通知'),
