@@ -12,6 +12,8 @@
 // only `tools`, which every agent runtime provides.
 
 import { createHmac } from 'node:crypto'
+import { connect as smtpNetConnect } from 'node:net'
+import { connect as smtpTlsConnect } from 'node:tls'
 import z from '@deepseek-ai/schemastery'
 
 export const inject = ['tools']
@@ -53,6 +55,19 @@ const NotifierConfig = z.object({
   emailFrom: z.string().default(''),
   emailFromName: z.string().default(''),
   emailTo: z.string().default(''),
+  // SMTP (私人模式) — 用自己的邮箱服务器发信
+  smtpHost: z.string().default(''),
+  smtpPort: z.string().default('465'),
+  smtpSecure: z.string().default('true'),
+  smtpUser: z.string().role('secret'),
+  smtpPass: z.string().role('secret'),
+  smtpFrom: z.string().default(''),
+  smtpFromName: z.string().default(''),
+  smtpTo: z.string().default(''),
+  // 钉钉机器人
+  dingtalkWebhook: z.string().role('secret'),
+  dingtalkSecret: z.string().role('secret'),
+  dingtalkAtAll: z.string().default('false'),
   feishuWebhook: z.string().role('secret'),
   feishuSecret: z.string().role('secret'),
   feishuAtAll: z.string().default('false'),
@@ -84,10 +99,17 @@ const CONFIG_DEFAULTS = {
   emailFrom: '',
   emailFromName: '',
   emailTo: '',
+  smtpHost: '',
+  smtpPort: '465',
+  smtpSecure: 'true',
+  smtpFrom: '',
+  smtpFromName: '',
+  smtpTo: '',
+  dingtalkAtAll: 'false',
   feishuAtAll: 'false',
 }
 
-const CHANNELS = ['notifyx', 'webhook', 'wechatbot', 'email', 'feishu']
+const CHANNELS = ['notifyx', 'webhook', 'wechatbot', 'email', 'smtp', 'dingtalk', 'feishu']
 
 const TOOL_OUTPUT_SCHEMA = {
   type: 'object',
@@ -157,6 +179,17 @@ function normalizeConfig(raw) {
     emailFrom: str('emailFrom'),
     emailFromName: str('emailFromName'),
     emailTo: str('emailTo'),
+    smtpHost: str('smtpHost'),
+    smtpPort: str('smtpPort', '465').trim() || '465',
+    smtpSecure: str('smtpSecure', 'true'),
+    smtpUser: str('smtpUser'),
+    smtpPass: str('smtpPass'),
+    smtpFrom: str('smtpFrom'),
+    smtpFromName: str('smtpFromName'),
+    smtpTo: str('smtpTo'),
+    dingtalkWebhook: str('dingtalkWebhook'),
+    dingtalkSecret: str('dingtalkSecret'),
+    dingtalkAtAll: str('dingtalkAtAll', 'false'),
     feishuWebhook: str('feishuWebhook'),
     feishuSecret: str('feishuSecret'),
     feishuAtAll: str('feishuAtAll', 'false'),
@@ -326,6 +359,148 @@ async function sendEmail(title, content, c) {
   }
 }
 
+// ---- minimal SMTP client (node:net / node:tls only, no external dep) --------
+
+function smtpBase64(value) {
+  return Buffer.from(String(value), 'utf8').toString('base64')
+}
+
+function smtpConnect(host, port, secure) {
+  return new Promise((resolve, reject) => {
+    let socket
+    if (secure) {
+      socket = smtpTlsConnect({ host, port, servername: host, rejectUnauthorized: false })
+    } else {
+      socket = smtpNetConnect({ host, port })
+    }
+    socket.setTimeout(15_000)
+    socket.once('connect', () => resolve(socket))
+    socket.once('error', reject)
+    socket.once('timeout', () => {
+      socket.destroy()
+      reject(new Error('SMTP 连接超时'))
+    })
+  })
+}
+
+function smtpExpect(socket, code, what) {
+  return new Promise((resolve, reject) => {
+    let buffer = ''
+    const timer = setTimeout(() => {
+      socket.removeListener('data', onData)
+      reject(new Error(`${what} 超时`))
+    }, 10_000)
+    function onData(chunk) {
+      buffer += chunk.toString('utf8')
+      let idx
+      while ((idx = buffer.indexOf('\n')) !== -1) {
+        const line = buffer.slice(0, idx).replace(/\r$/, '')
+        buffer = buffer.slice(idx + 1)
+        if (line.startsWith(`${code} `)) {
+          clearTimeout(timer)
+          socket.removeListener('data', onData)
+          resolve(line)
+          return
+        }
+        if (line.startsWith(`${code}-`)) continue // 多行响应
+        clearTimeout(timer)
+        socket.removeListener('data', onData)
+        reject(new Error(`${what} 响应异常: ${line.slice(0, 200)}`))
+        return
+      }
+    }
+    socket.on('data', onData)
+  })
+}
+
+async function smtpSend(socket, command, code, what) {
+  socket.write(command + '\r\n')
+  return smtpExpect(socket, code, what)
+}
+
+async function sendSmtpEmail(title, content, c, recipientOverride) {
+  let socket
+  try {
+    if (!c.smtpHost || !c.smtpPort) return { ok: false, error: 'SMTP 缺少必要参数（服务器 / 端口）' }
+    if (!c.smtpUser && !c.smtpPass) return { ok: false, error: 'SMTP 需要账号密码' }
+    const to = recipientOverride || c.smtpTo
+    if (!to) return { ok: false, error: 'SMTP 缺少收件人' }
+    const from = c.smtpFrom || c.smtpUser
+    const fromDisplay = c.smtpFromName ? `${c.smtpFromName} <${from}>` : from
+    const secure = c.smtpSecure === 'true'
+    const port = Number(c.smtpPort) || (secure ? 465 : 587)
+
+    socket = await smtpConnect(c.smtpHost, port, secure)
+
+    await smtpExpect(socket, 220, 'SMTP 问候')
+    await smtpSend(socket, `EHLO ${c.smtpHost}`, 250, 'EHLO')
+    await smtpSend(socket, 'AUTH LOGIN', 334, 'AUTH')
+    await smtpSend(socket, smtpBase64(c.smtpUser), 334, '用户名')
+    await smtpSend(socket, smtpBase64(c.smtpPass), 235, '登录')
+    await smtpSend(socket, `MAIL FROM:<${from}>`, 250, '发件人')
+    await smtpSend(socket, `RCPT TO:<${to}>`, 250, '收件人')
+    await smtpSend(socket, 'DATA', 354, 'DATA')
+
+    const header = [
+      `From: ${fromDisplay}`,
+      `To: ${to}`,
+      `Subject: =?UTF-8?B?${smtpBase64(title)}?=`,
+      'MIME-Version: 1.0',
+      'Content-Type: text/plain; charset=UTF-8',
+      'Content-Transfer-Encoding: 8bit',
+      '',
+      content,
+      '.',
+    ].join('\r\n')
+    socket.write(header + '\r\n')
+    await smtpExpect(socket, 250, '邮件正文')
+    await smtpSend(socket, 'QUIT', 221, 'QUIT')
+    socket.end()
+    return { ok: true }
+  } catch (error) {
+    if (socket) socket.destroy()
+    return { ok: false, error: `SMTP 失败: ${error?.message ?? error}` }
+  }
+}
+
+async function sendDingtalk(title, content, c) {
+  try {
+    if (!c.dingtalkWebhook) return { ok: false, error: '未配置钉钉机器人 Webhook' }
+    const timestamp = Date.now()
+    let sign = ''
+    if (c.dingtalkSecret) {
+      // 钉钉加签：string_to_sign = timestamp + "\n" + secret
+      const stringToSign = `${timestamp}\n${c.dingtalkSecret}`
+      sign = '&timestamp=' + timestamp + '&sign=' + encodeURIComponent(
+        createHmac('sha256', stringToSign).update('').digest('base64'),
+      )
+    }
+    const body = {
+      msgtype: 'text',
+      text: { content: `${title}\n\n${content}` },
+    }
+    if (c.dingtalkAtAll === 'true') body.at = { isAtAll: true }
+    const response = await fetch(c.dingtalkWebhook + sign, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    const text = await response.text()
+    if (response.ok) {
+      try {
+        const result = JSON.parse(text)
+        if (result?.errcode === 0) return { ok: true }
+        return { ok: false, error: `钉钉机器人错误 ${result?.errcode ?? '?'}: ${result?.errmsg ?? text}`.slice(0, 240) }
+      } catch {
+        return { ok: false, error: `钉钉机器人响应解析失败: ${text.slice(0, 240)}` }
+      }
+    }
+    return { ok: false, error: `HTTP ${response.status} ${text.slice(0, 240)}` }
+  } catch (error) {
+    return { ok: false, error: `钉钉机器人请求失败: ${error?.message ?? error}` }
+  }
+}
+
 async function sendFeishu(title, content, c) {
   try {
     if (!c.feishuWebhook) return { ok: false, error: '未配置飞书机器人 Webhook' }
@@ -364,18 +539,20 @@ async function sendFeishu(title, content, c) {
   }
 }
 
-async function sendToChannel(channel, title, content, c) {
+async function sendToChannel(channel, title, content, c, recipientOverride) {
   switch (channel) {
     case 'notifyx': return sendNotifyX(title, `## ${title}\n\n${content}`, c)
     case 'webhook': return sendWebhook(title, stripMarkdown(content), c)
     case 'wechatbot': return sendWechatBot(title, stripMarkdown(content), c)
     case 'email': return sendEmail(title, stripMarkdown(content), c)
+    case 'smtp': return sendSmtpEmail(title, stripMarkdown(content), c, recipientOverride)
+    case 'dingtalk': return sendDingtalk(title, stripMarkdown(content), c)
     case 'feishu': return sendFeishu(title, stripMarkdown(content), c)
     default: return { ok: false, error: `未知渠道: ${channel}` }
   }
 }
 
-async function sendToAllChannels(title, content, rawConfig) {
+async function sendToAllChannels(title, content, rawConfig, recipientOverride) {
   const config = normalizeConfig(rawConfig)
   const results = {}
   const errors = []
@@ -584,12 +761,13 @@ export function apply(ctx, config = {}) {
   ctx.tools.register({
     name: 'send_notification',
     description:
-      '通过 dsh-notifier 已启用的渠道（NotifyX、企业微信应用通知、企业微信机器人、邮件、飞书机器人）发送一条通知。使用场景：用户要求“通知我”“发个提醒”“推送结果”等。发送目标与渠道在 DSH 设置 → 通知 页面配置。',
+      '通过 dsh-notifier 已启用的渠道（NotifyX、企业微信应用通知、企业微信机器人、邮件、SMTP 私人邮件、钉钉机器人、飞书机器人）发送一条通知。使用场景：用户要求“通知我”“发个提醒”“推送结果”等。发送目标与渠道在 DSH 设置 → 通知 页面配置。',
     parameters: {
       type: 'object',
       properties: {
         title: { type: 'string', description: '通知标题。' },
         content: { type: 'string', description: '通知正文。' },
+        to: { type: 'string', description: '可选。SMTP 邮件临时收件人，覆盖默认收件人。' },
       },
       required: ['title', 'content'],
     },
@@ -611,7 +789,7 @@ export function apply(ctx, config = {}) {
       if (typeof args?.content !== 'string') {
         throw new Error('send_notification 需要字符串 content。')
       }
-      const { results, errors } = await sendToAllChannels(args.title, args.content, configHandle.value)
+      const { results, errors } = await sendToAllChannels(args.title, args.content, configHandle.value, args.to)
       return {
         sent: Object.entries(results).filter(([, r]) => r.ok).map(([channel]) => channel),
         failed: errors,

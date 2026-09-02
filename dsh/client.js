@@ -23,10 +23,12 @@ window.__ModuleLoader__.load({
       { id: 'webhook', label: '企业微信应用通知', hint: '通用 Webhook' },
       { id: 'wechatbot', label: '企业微信机器人', hint: '群机器人 Webhook' },
       { id: 'email', label: '邮件通知', hint: 'Resend' },
+      { id: 'smtp', label: 'SMTP 私人邮件', hint: '自己的邮箱服务器' },
+      { id: 'dingtalk', label: '钉钉机器人', hint: 'Webhook 机器人' },
       { id: 'feishu', label: '飞书机器人', hint: '自定义机器人 Webhook' },
     ]
 
-    const SECRET_KEYS = ['notifyxApiKey', 'webhookUrl', 'wechatbotWebhook', 'resendApiKey', 'feishuWebhook', 'feishuSecret']
+    const SECRET_KEYS = ['notifyxApiKey', 'webhookUrl', 'wechatbotWebhook', 'resendApiKey', 'smtpUser', 'smtpPass', 'dingtalkWebhook', 'dingtalkSecret', 'feishuWebhook', 'feishuSecret']
 
     const TEXT_FIELDS = [
       { key: 'webhookMethod', label: '请求方法', type: 'select', options: ['POST', 'GET', 'PUT', 'PATCH', 'DELETE'] },
@@ -38,6 +40,13 @@ window.__ModuleLoader__.load({
       { key: 'emailFrom', label: '发件人地址', type: 'text', placeholder: 'noreply@example.com' },
       { key: 'emailFromName', label: '发件人名称', type: 'text', placeholder: 'DSH 通知' },
       { key: 'emailTo', label: '收件人', type: 'text', placeholder: 'me@example.com' },
+      { key: 'smtpHost', label: 'SMTP 服务器', type: 'text', placeholder: 'smtp.qq.com' },
+      { key: 'smtpPort', label: 'SMTP 端口', type: 'text', placeholder: '465' },
+      { key: 'smtpSecure', label: 'SSL/TLS', type: 'select', options: ['true', 'false'] },
+      { key: 'smtpFrom', label: 'SMTP 发件人地址', type: 'text', placeholder: 'you@qq.com' },
+      { key: 'smtpFromName', label: 'SMTP 发件人名称', type: 'text', placeholder: 'DSH 通知' },
+      { key: 'smtpTo', label: 'SMTP 默认收件人', type: 'text', placeholder: 'friend@example.com' },
+      { key: 'dingtalkAtAll', label: '@ 所有人', type: 'select', options: ['false', 'true'] },
       { key: 'feishuAtAll', label: '@ 所有人', type: 'select', options: ['false', 'true'] },
     ]
 
@@ -46,6 +55,10 @@ window.__ModuleLoader__.load({
       webhookUrl: 'Webhook URL',
       wechatbotWebhook: '机器人 Webhook URL',
       resendApiKey: 'Resend API Key',
+      smtpUser: 'SMTP 账号',
+      smtpPass: 'SMTP 密码/授权码',
+      dingtalkWebhook: '钉钉机器人 Webhook URL',
+      dingtalkSecret: '钉钉加签密钥（可选）',
       feishuWebhook: '飞书机器人 Webhook URL',
       feishuSecret: '飞书机器人加签密钥（可选）',
     }
@@ -207,12 +220,19 @@ window.__ModuleLoader__.load({
         emailFrom: s('emailFrom', ''),
         emailFromName: s('emailFromName', ''),
         emailTo: s('emailTo', ''),
+        smtpHost: s('smtpHost', ''),
+        smtpPort: s('smtpPort', '465'),
+        smtpSecure: s('smtpSecure', 'true'),
+        smtpFrom: s('smtpFrom', ''),
+        smtpFromName: s('smtpFromName', ''),
+        smtpTo: s('smtpTo', ''),
+        dingtalkAtAll: s('dingtalkAtAll', 'false'),
         feishuAtAll: s('feishuAtAll', 'false'),
       }
     }
 
     function emptySecrets() {
-      return { notifyxApiKey: '', webhookUrl: '', wechatbotWebhook: '', resendApiKey: '', feishuWebhook: '', feishuSecret: '' }
+      return { notifyxApiKey: '', webhookUrl: '', wechatbotWebhook: '', resendApiKey: '', smtpUser: '', smtpPass: '', dingtalkWebhook: '', dingtalkSecret: '', feishuWebhook: '', feishuSecret: '' }
     }
 
     function secretConfigured(mirrored, key) {
@@ -992,6 +1012,91 @@ window.__ModuleLoader__.load({
               React.createElement('input', { type: 'text', style: styles.input, placeholder: 'me@example.com', value: draft.emailTo, disabled: !writable, onChange: function (e) { setField('emailTo', e.target.value) } }),
             ),
             testMsg && testMsg.channel === 'email'
+              ? React.createElement('div', { style: Object.assign({}, styles.msg, testMsg.ok ? styles.msgOk : styles.msgErr) }, testMsg.text)
+              : null,
+          ) : null,
+
+          // SMTP 私人邮件
+          draft.enabledNotifiers.includes('smtp') ? React.createElement(
+            'div',
+            { style: styles.card },
+            React.createElement('div', { style: styles.cardHead },
+              React.createElement('span', { style: styles.cardTitle }, 'SMTP 私人邮件'),
+              React.createElement('button', { type: 'button', style: styles.btn, disabled: !writable || testing !== null, onClick: function () { testChannel('smtp') } }, testing === 'smtp' ? '测试中…' : '测试 SMTP 通知'),
+            ),
+            React.createElement('div', { style: styles.cardHint }, '用自己的邮箱服务器发信（QQ邮箱/163/Gmail 等）。密码用邮箱的「授权码」。'),
+            React.createElement(SecretInput, {
+              label: SECRET_LABELS.smtpUser,
+              configured: configured.smtpUser,
+              value: secretDrafts.smtpUser,
+              disabled: !writable,
+              onChange: function (v) { setSecretDrafts(function (d) { return Object.assign({}, d, { smtpUser: v }) }) },
+              onClear: function () { clearSecret('smtpUser') },
+            }),
+            React.createElement(SecretInput, {
+              label: SECRET_LABELS.smtpPass,
+              configured: configured.smtpPass,
+              value: secretDrafts.smtpPass,
+              disabled: !writable,
+              onChange: function (v) { setSecretDrafts(function (d) { return Object.assign({}, d, { smtpPass: v }) }) },
+              onClear: function () { clearSecret('smtpPass') },
+            }),
+            React.createElement(Field, { label: TEXT_FIELDS.find(function (f) { return f.key === 'smtpHost' }).label },
+              React.createElement('input', { type: 'text', style: styles.input, placeholder: 'smtp.qq.com', value: draft.smtpHost, disabled: !writable, onChange: function (e) { setField('smtpHost', e.target.value) } }),
+            ),
+            React.createElement(Field, { label: TEXT_FIELDS.find(function (f) { return f.key === 'smtpPort' }).label, hint: '465 = SSL，587 = STARTTLS' },
+              React.createElement('input', { type: 'text', style: styles.input, placeholder: '465', value: draft.smtpPort, disabled: !writable, onChange: function (e) { setField('smtpPort', e.target.value) } }),
+            ),
+            React.createElement(Field, { label: TEXT_FIELDS.find(function (f) { return f.key === 'smtpSecure' }).label },
+              React.createElement('select', { style: styles.input, value: draft.smtpSecure, disabled: !writable, onChange: function (e) { setField('smtpSecure', e.target.value) } },
+                ['true', 'false'].map(function (o) { return React.createElement('option', { key: o, value: o }, o === 'true' ? 'SSL（端口 465）' : '非 SSL（端口 587/25）') }),
+              ),
+            ),
+            React.createElement(Field, { label: TEXT_FIELDS.find(function (f) { return f.key === 'smtpFrom' }).label, hint: '留空则用 SMTP 账号' },
+              React.createElement('input', { type: 'text', style: styles.input, placeholder: 'you@qq.com', value: draft.smtpFrom, disabled: !writable, onChange: function (e) { setField('smtpFrom', e.target.value) } }),
+            ),
+            React.createElement(Field, { label: TEXT_FIELDS.find(function (f) { return f.key === 'smtpFromName' }).label },
+              React.createElement('input', { type: 'text', style: styles.input, placeholder: 'DSH 通知', value: draft.smtpFromName, disabled: !writable, onChange: function (e) { setField('smtpFromName', e.target.value) } }),
+            ),
+            React.createElement(Field, { label: TEXT_FIELDS.find(function (f) { return f.key === 'smtpTo' }).label, hint: '默认收件人；send_notification 可传 to 临时覆盖' },
+              React.createElement('input', { type: 'text', style: styles.input, placeholder: 'friend@example.com', value: draft.smtpTo, disabled: !writable, onChange: function (e) { setField('smtpTo', e.target.value) } }),
+            ),
+            testMsg && testMsg.channel === 'smtp'
+              ? React.createElement('div', { style: Object.assign({}, styles.msg, testMsg.ok ? styles.msgOk : styles.msgErr) }, testMsg.text)
+              : null,
+          ) : null,
+
+          // 钉钉机器人
+          draft.enabledNotifiers.includes('dingtalk') ? React.createElement(
+            'div',
+            { style: styles.card },
+            React.createElement('div', { style: styles.cardHead },
+              React.createElement('span', { style: styles.cardTitle }, '钉钉机器人'),
+              React.createElement('button', { type: 'button', style: styles.btn, disabled: !writable || testing !== null, onClick: function () { testChannel('dingtalk') } }, testing === 'dingtalk' ? '测试中…' : '测试钉钉通知'),
+            ),
+            React.createElement('div', { style: styles.cardHint }, '钉钉群自定义机器人 Webhook；开启「加签」时填写密钥。'),
+            React.createElement(SecretInput, {
+              label: SECRET_LABELS.dingtalkWebhook,
+              configured: configured.dingtalkWebhook,
+              value: secretDrafts.dingtalkWebhook,
+              disabled: !writable,
+              onChange: function (v) { setSecretDrafts(function (d) { return Object.assign({}, d, { dingtalkWebhook: v }) }) },
+              onClear: function () { clearSecret('dingtalkWebhook') },
+            }),
+            React.createElement(SecretInput, {
+              label: SECRET_LABELS.dingtalkSecret,
+              configured: configured.dingtalkSecret,
+              value: secretDrafts.dingtalkSecret,
+              disabled: !writable,
+              onChange: function (v) { setSecretDrafts(function (d) { return Object.assign({}, d, { dingtalkSecret: v }) }) },
+              onClear: function () { clearSecret('dingtalkSecret') },
+            }),
+            React.createElement(Field, { label: TEXT_FIELDS.find(function (f) { return f.key === 'dingtalkAtAll' }).label },
+              React.createElement('select', { style: styles.input, value: draft.dingtalkAtAll, disabled: !writable, onChange: function (e) { setField('dingtalkAtAll', e.target.value) } },
+                ['false', 'true'].map(function (o) { return React.createElement('option', { key: o, value: o }, o === 'true' ? '@所有人' : '不 @') }),
+              ),
+            ),
+            testMsg && testMsg.channel === 'dingtalk'
               ? React.createElement('div', { style: Object.assign({}, styles.msg, testMsg.ok ? styles.msgOk : styles.msgErr) }, testMsg.text)
               : null,
           ) : null,
