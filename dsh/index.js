@@ -30,6 +30,14 @@ const SETTINGS_NS = (() => {
 // ---- schema (flat, matching the original form field ids) -------------------
 
 const NotifierConfig = z.object({
+  enabled: z.boolean().default(true),
+  sound: z.boolean().default(true),
+  title: z.string().default('DeepSeek Harness'),
+  browserNotify: z.boolean().default(false),
+  onRunEnd: z.boolean().default(true),
+  onBlocked: z.boolean().default(true),
+  onQuestion: z.boolean().default(true),
+  onApproval: z.boolean().default(true),
   enabledNotifiers: z.array(z.string()).default(['notifyx']),
   notifyOnGoalComplete: z.boolean().default(false),
   notifyxApiKey: z.string().role('secret'),
@@ -57,6 +65,14 @@ const NotifierConfig = z.object({
 // secret always defined and thus always "已配置", even when the user set
 // nothing.
 const CONFIG_DEFAULTS = {
+  enabled: true,
+  sound: true,
+  title: 'DeepSeek Harness',
+  browserNotify: false,
+  onRunEnd: true,
+  onBlocked: true,
+  onQuestion: true,
+  onApproval: true,
   enabledNotifiers: ['notifyx'],
   notifyOnGoalComplete: false,
   webhookMethod: 'POST',
@@ -145,6 +161,14 @@ function normalizeConfig(raw) {
     feishuSecret: str('feishuSecret'),
     feishuAtAll: str('feishuAtAll', 'false'),
     notifyOnGoalComplete: s.notifyOnGoalComplete === true,
+    enabled: s.enabled !== false,
+    sound: s.sound !== false,
+    title: typeof s.title === 'string' && s.title.trim() ? s.title.trim() : 'DeepSeek Harness',
+    browserNotify: s.browserNotify === true,
+    onRunEnd: s.onRunEnd !== false,
+    onBlocked: s.onBlocked !== false,
+    onQuestion: s.onQuestion !== false,
+    onApproval: s.onApproval !== false,
   }
 }
 
@@ -426,6 +450,136 @@ export function apply(ctx, config = {}) {
   // value; the tool and the loopback test route read through this handle.
   const configHandle = { value: CONFIG_DEFAULTS }
 
+  // ---- per-session run tracking (headless external-channel delivery) ---------
+  // Tracks running→idle transitions per session, records the last turn/end
+  // reason, and fires external-channel notifications. This is the "headless
+  // fallback": it works whether or not a browser page is open. The client
+  // half handles local browser notifications on its own (no dedup because
+  // the client never sends to external channels through us).
+
+  /** session id → 'running' | 'idle' */
+  const sessionStatus = new Map()
+  /** session id → last turn/end reason kind */
+  const sessionEndReason = new Map()
+  /** session id → pending-idle timer (null if no pending timer) */
+  const pendingIdle = new Map()
+  const IDLE_GRACE_MS = 1500
+
+  function cancelIdleTimer(sessionId) {
+    const timer = pendingIdle.get(sessionId)
+    if (timer !== undefined) {
+      clearTimeout(timer)
+      pendingIdle.delete(sessionId)
+    }
+  }
+
+  function settleIdle(sessionId) {
+    cancelIdleTimer(sessionId)
+    const kind = sessionEndReason.get(sessionId)
+    if (kind !== undefined) {
+      sessionEndReason.delete(sessionId)
+      emitRunEndExternal(sessionId, kind)
+    }
+  }
+
+  function emitRunEndExternal(sessionId, kind) {
+    const cfg = normalizeConfig(configHandle.value)
+    if (cfg.enabled === false || cfg.onRunEnd === false) return
+    const resultText = {
+      completed: '任务已完成',
+      error: '任务失败',
+      aborted: '任务已中止',
+      'max-tokens': '任务达到 token 上限',
+      blocked: '任务被阻塞',
+      interrupted: '任务被中断',
+    }[kind] || '任务结束'
+    sendToAllChannels('🤖 ' + resultText, `会话 ${sessionId} 已完成。`, configHandle.value).catch(() => {})
+  }
+
+  function emitBlockedExternal(kind, detail, sessionId) {
+    const cfg = normalizeConfig(configHandle.value)
+    if (cfg.enabled === false) return
+    if (kind === 'blocked' && cfg.onBlocked === false) return
+    if (kind === 'question' && cfg.onQuestion === false) return
+    if (kind === 'approval' && cfg.onApproval === false) return
+    const label = kind === 'question' ? '需要回答' : kind === 'approval' ? '需要批准' : '需要处理'
+    sendToAllChannels('⏸️ ' + label, `会话 ${sessionId}：${detail}`, configHandle.value).catch(() => {})
+  }
+
+  // Track running→idle transitions via agent/status.
+  ctx.on('agent/status', ({ agent, status }) => {
+    const sessionId = agent.id
+    if (status === 'running') {
+      sessionStatus.set(sessionId, 'running')
+      sessionEndReason.delete(sessionId)
+      cancelIdleTimer(sessionId)
+      return
+    }
+    // status === 'idle'
+    const prev = sessionStatus.get(sessionId)
+    sessionStatus.set(sessionId, 'idle')
+    if (prev !== 'running') return
+    // Was running, now idle — check if we have a turn/end reason.
+    if (sessionEndReason.has(sessionId)) {
+      settleIdle(sessionId)
+      return
+    }
+    // turn/end may arrive late; wait a grace window.
+    cancelIdleTimer(sessionId)
+    pendingIdle.set(sessionId, setTimeout(() => {
+      settleIdle(sessionId)
+    }, IDLE_GRACE_MS))
+  })
+
+  // Record turn/end reasons and check for blocking events.
+  ctx.on('session/event', (session, event) => {
+    if (event?.type === 'turn/end') {
+      const data = event?.data
+      const kind = typeof data?.reason?.kind === 'string' ? data.reason.kind : 'unknown'
+      sessionEndReason.set(session.id, kind)
+      // If we're already idle and waiting for a reason, settle now.
+      if (sessionStatus.get(session.id) === 'idle' && pendingIdle.has(session.id)) {
+        settleIdle(session.id)
+      }
+      return
+    }
+    // Blocking: tool/call (ask_user_question)
+    if (event?.type === 'tool/call') {
+      const data = event?.data
+      if (data?.name !== 'ask_user_question') return
+      let detail = ''
+      if (typeof data.arguments === 'string') {
+        try {
+          const parsed = JSON.parse(data.arguments)
+          const questions = parsed?.questions
+          if (Array.isArray(questions) && questions.length > 0) {
+            detail = typeof questions[0]?.question === 'string' ? questions[0].question : ''
+          }
+        } catch { /* ignore parse errors */ }
+      }
+      emitBlockedExternal('question', detail, session.id)
+      return
+    }
+    // Blocking: approval/asked
+    if (event?.type === 'approval/asked') {
+      const data = event?.data
+      const toolName = typeof data?.toolName === 'string' ? data.toolName : ''
+      const reason = typeof data?.reason === 'string' ? data.reason : ''
+      const detail = toolName ? (reason ? `${toolName} — ${reason}` : toolName) : ''
+      emitBlockedExternal('approval', detail, session.id)
+      return
+    }
+    // Goal-complete (existing behavior)
+    if (event?.type === 'goal/change') {
+      const change = event?.data
+      if (!change || change.operation !== 'complete') return
+      const cfg = normalizeConfig(configHandle.value)
+      if (cfg.notifyOnGoalComplete !== true) return
+      const objective = typeof change.goal?.objective === 'string' && change.goal.objective ? change.goal.objective : '未命名目标'
+      sendToAllChannels('✅ 任务完成', `目标「${objective}」已完成。`, configHandle.value).catch(() => {})
+    }
+  })
+
   // The model tool: require `tools`, which every agent runtime provides.
   ctx.tools.register({
     name: 'send_notification',
@@ -486,10 +640,11 @@ export function apply(ctx, config = {}) {
     })
   }
 
-  // Web seam: loopback-only test route for the settings page's test buttons.
+  // Web seam: loopback-only routes for the settings page.
   if (typeof ctx.inject === 'function') {
     ctx.inject(['webServer'], (scope) => {
       try {
+        // Test route: per-channel test (existing).
         scope.webServer.register({
           name: 'dsh-notifier-test',
           kind: 'exact',
@@ -525,17 +680,6 @@ export function apply(ctx, config = {}) {
     })
   }
 
-  // Auto-notify on goal completion: the session event firehose carries a
-  // durable `goal/change` event whose `operation` is 'complete' when a tracked
-  // goal is marked complete. When the user opted in via `notifyOnGoalComplete`,
-  // fan out a notification to every enabled channel (fire-and-forget).
-  ctx.on('session/event', (session, event) => {
-    if (event?.type !== 'goal/change') return
-    const change = event?.data
-    if (!change || change.operation !== 'complete') return
-    const cfg = normalizeConfig(configHandle.value)
-    if (cfg.notifyOnGoalComplete !== true) return
-    const objective = typeof change.goal?.objective === 'string' && change.goal.objective ? change.goal.objective : '未命名目标'
-    sendToAllChannels('✅ 任务完成', `目标「${objective}」已完成。`, configHandle.value).catch(() => {})
-  })
+  // Auto-notify on goal completion, run-end, and blocking events is handled
+  // in the single `session/event` + `agent/status` listeners above.
 }

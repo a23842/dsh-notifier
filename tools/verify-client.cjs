@@ -81,7 +81,7 @@ const apply = mod && mod.apply
 console.log('inject    =', JSON.stringify(inject))
 console.log('apply     =', typeof apply)
 
-const expectInject = ['slots', 'settingsScope']
+const expectInject = ['slots', 'settingsScope', 'connection', 'sessions']
 const expectId = '@a23842/dsh-notifier'
 const injectOk = Array.isArray(inject) && expectInject.every((n) => inject.includes(n))
 const applyOk = typeof apply === 'function'
@@ -104,6 +104,7 @@ if (!applyOk) {
 // 真实调用 apply()：mock ctx 跑一遍槽位注册，捕获运行期错误与注册 id。
 const registrations = []
 const ctx = {
+  effect: () => () => {},
   settingsScope: {
     bind() {
       return {
@@ -127,6 +128,22 @@ const ctx = {
     },
     register(config, component) {
       return { name: config.name, id: config.id, component }
+    },
+  },
+  connection: {
+    api: {
+      events: {
+        // Async generators used by the watcher loop. Aborting the controller
+        // ends iteration so the mock never leaks timers or streams.
+        mux: async function* () {},
+        host: async function* () {},
+      },
+    },
+  },
+  sessions: {
+    list: {
+      getSnapshot: () => ({ byId: {} }),
+      subscribe: () => () => {},
     },
   },
 }
