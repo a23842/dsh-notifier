@@ -28,9 +28,10 @@ window.__ModuleLoader__.load({
       { id: 'webhook', label: '企业微信应用通知', hint: '通用 Webhook' },
       { id: 'wechatbot', label: '企业微信机器人', hint: '群机器人 Webhook' },
       { id: 'email', label: '邮件通知', hint: 'Resend' },
+      { id: 'feishu', label: '飞书机器人', hint: '自定义机器人 Webhook' },
     ]
 
-    const SECRET_KEYS = ['notifyxApiKey', 'webhookUrl', 'wechatbotWebhook', 'resendApiKey']
+    const SECRET_KEYS = ['notifyxApiKey', 'webhookUrl', 'wechatbotWebhook', 'resendApiKey', 'feishuWebhook', 'feishuSecret']
 
     const TEXT_FIELDS = [
       { key: 'webhookMethod', label: '请求方法', type: 'select', options: ['POST', 'GET', 'PUT', 'PATCH', 'DELETE'] },
@@ -42,6 +43,7 @@ window.__ModuleLoader__.load({
       { key: 'emailFrom', label: '发件人地址', type: 'text', placeholder: 'noreply@example.com' },
       { key: 'emailFromName', label: '发件人名称', type: 'text', placeholder: 'DSH 通知' },
       { key: 'emailTo', label: '收件人', type: 'text', placeholder: 'me@example.com' },
+      { key: 'feishuAtAll', label: '@ 所有人', type: 'select', options: ['false', 'true'] },
     ]
 
     const SECRET_LABELS = {
@@ -49,6 +51,8 @@ window.__ModuleLoader__.load({
       webhookUrl: 'Webhook URL',
       wechatbotWebhook: '机器人 Webhook URL',
       resendApiKey: 'Resend API Key',
+      feishuWebhook: '飞书机器人 Webhook URL',
+      feishuSecret: '飞书机器人加签密钥（可选）',
     }
 
     const styles = {
@@ -154,11 +158,12 @@ window.__ModuleLoader__.load({
         emailFrom: s('emailFrom', ''),
         emailFromName: s('emailFromName', ''),
         emailTo: s('emailTo', ''),
+        feishuAtAll: s('feishuAtAll', 'false'),
       }
     }
 
     function emptySecrets() {
-      return { notifyxApiKey: '', webhookUrl: '', wechatbotWebhook: '', resendApiKey: '' }
+      return { notifyxApiKey: '', webhookUrl: '', wechatbotWebhook: '', resendApiKey: '', feishuWebhook: '', feishuSecret: '' }
     }
 
     function secretConfigured(mirrored, key) {
@@ -468,6 +473,41 @@ window.__ModuleLoader__.load({
               React.createElement('input', { type: 'text', style: styles.input, placeholder: 'me@example.com', value: draft.emailTo, disabled: !writable, onChange: (e) => setField('emailTo', e.target.value) }),
             ),
             testMsg && testMsg.channel === 'email'
+              ? React.createElement('div', { style: Object.assign({}, styles.msg, testMsg.ok ? styles.msgOk : styles.msgErr) }, testMsg.text)
+              : null,
+          ),
+
+          // 飞书机器人
+          React.createElement(
+            'div',
+            { style: styles.card },
+            React.createElement('div', { style: styles.cardHead },
+              React.createElement('span', { style: styles.cardTitle }, '飞书机器人'),
+              React.createElement('button', { type: 'button', style: styles.btn, disabled: !writable || testing !== null, onClick: () => testChannel('feishu') }, testing === 'feishu' ? '测试中…' : '测试飞书通知'),
+            ),
+            React.createElement('div', { style: styles.cardHint }, '自定义机器人 Webhook；加签密钥可选（开启签名校验时填写）。'),
+            React.createElement(SecretInput, {
+              label: SECRET_LABELS.feishuWebhook,
+              configured: configured.feishuWebhook,
+              value: secretDrafts.feishuWebhook,
+              disabled: !writable,
+              onChange: (v) => setSecretDrafts((d) => Object.assign({}, d, { feishuWebhook: v })),
+              onClear: () => clearSecret('feishuWebhook'),
+            }),
+            React.createElement(SecretInput, {
+              label: SECRET_LABELS.feishuSecret,
+              configured: configured.feishuSecret,
+              value: secretDrafts.feishuSecret,
+              disabled: !writable,
+              onChange: (v) => setSecretDrafts((d) => Object.assign({}, d, { feishuSecret: v })),
+              onClear: () => clearSecret('feishuSecret'),
+            }),
+            React.createElement(Field, { label: TEXT_FIELDS.find((f) => f.key === 'feishuAtAll').label },
+              React.createElement('select', { style: styles.input, value: draft.feishuAtAll, disabled: !writable, onChange: (e) => setField('feishuAtAll', e.target.value) },
+                ['false', 'true'].map((o) => React.createElement('option', { key: o, value: o }, o === 'true' ? '@所有人' : '不 @')),
+              ),
+            ),
+            testMsg && testMsg.channel === 'feishu'
               ? React.createElement('div', { style: Object.assign({}, styles.msg, testMsg.ok ? styles.msgOk : styles.msgErr) }, testMsg.text)
               : null,
           ),

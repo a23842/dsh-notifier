@@ -11,6 +11,7 @@
 // stays loadable on hosts that do not provide them; the tool itself requires
 // only `tools`, which every agent runtime provides.
 
+import { createHmac } from 'node:crypto'
 import z from '@deepseek-ai/schemastery'
 import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 
@@ -35,6 +36,9 @@ const NotifierConfig = z.object({
   emailFrom: z.string().default(''),
   emailFromName: z.string().default(''),
   emailTo: z.string().default(''),
+  feishuWebhook: z.string().role('secret').default(''),
+  feishuSecret: z.string().role('secret').default(''),
+  feishuAtAll: z.string().default('false'),
 })
 
 const CONFIG_DEFAULTS = {
@@ -52,9 +56,12 @@ const CONFIG_DEFAULTS = {
   emailFrom: '',
   emailFromName: '',
   emailTo: '',
+  feishuWebhook: '',
+  feishuSecret: '',
+  feishuAtAll: 'false',
 }
 
-const CHANNELS = ['notifyx', 'webhook', 'wechatbot', 'email']
+const CHANNELS = ['notifyx', 'webhook', 'wechatbot', 'email', 'feishu']
 
 const TOOL_OUTPUT_SCHEMA = {
   type: 'object',
@@ -124,6 +131,9 @@ function normalizeConfig(raw) {
     emailFrom: str('emailFrom'),
     emailFromName: str('emailFromName'),
     emailTo: str('emailTo'),
+    feishuWebhook: str('feishuWebhook'),
+    feishuSecret: str('feishuSecret'),
+    feishuAtAll: str('feishuAtAll', 'false'),
   }
 }
 
@@ -281,12 +291,51 @@ async function sendEmail(title, content, c) {
   }
 }
 
+async function sendFeishu(title, content, c) {
+  try {
+    if (!c.feishuWebhook) return { ok: false, error: '未配置飞书机器人 Webhook' }
+    const timestamp = Math.floor(Date.now() / 1000)
+    let body
+    if (c.feishuSecret) {
+      // 飞书自定义机器人加签：string_to_sign = `${timestamp}\n${secret}`，
+      // 以该字符串为 key、空消息做 HMAC-SHA256，再 base64。
+      const stringToSign = `${timestamp}\n${c.feishuSecret}`
+      const sign = createHmac('sha256', stringToSign).update('').digest('base64')
+      body = { timestamp: `${timestamp}`, sign, msg_type: 'text', content: { text: `${title}\n\n${content}` } }
+    } else {
+      body = { msg_type: 'text', content: { text: `${title}\n\n${content}` } }
+    }
+    if (c.feishuAtAll === 'true') {
+      body.content.text += '\n<at user_id="all">所有人</at>'
+    }
+    const response = await fetch(c.feishuWebhook, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    const text = await response.text().catch(() => '')
+    if (response.ok) {
+      try {
+        const result = JSON.parse(text)
+        if (result?.code === 0 || result?.StatusCode === 0) return { ok: true }
+        return { ok: false, error: `飞书机器人错误 ${result?.code ?? result?.StatusCode ?? '?'}: ${result?.msg ?? text}`.slice(0, 240) }
+      } catch {
+        return { ok: false, error: `飞书机器人响应解析失败: ${text.slice(0, 240)}` }
+      }
+    }
+    return { ok: false, error: `HTTP ${response.status} ${text.slice(0, 240)}` }
+  } catch (error) {
+    return { ok: false, error: `飞书机器人请求失败: ${error?.message ?? error}` }
+  }
+}
+
 async function sendToChannel(channel, title, content, c) {
   switch (channel) {
     case 'notifyx': return sendNotifyX(title, `## ${title}\n\n${content}`, c)
     case 'webhook': return sendWebhook(title, stripMarkdown(content), c)
     case 'wechatbot': return sendWechatBot(title, stripMarkdown(content), c)
     case 'email': return sendEmail(title, stripMarkdown(content), c)
+    case 'feishu': return sendFeishu(title, stripMarkdown(content), c)
     default: return { ok: false, error: `未知渠道: ${channel}` }
   }
 }
@@ -370,7 +419,7 @@ export function apply(ctx, config = {}) {
   ctx.tools.register({
     name: 'send_notification',
     description:
-      '通过 dsh-notifier 已启用的渠道（NotifyX、企业微信应用通知、企业微信机器人、邮件）发送一条通知。使用场景：用户要求“通知我”“发个提醒”“推送结果”等。发送目标与渠道在 DSH 设置 → 通知 页面配置。',
+      '通过 dsh-notifier 已启用的渠道（NotifyX、企业微信应用通知、企业微信机器人、邮件、飞书机器人）发送一条通知。使用场景：用户要求“通知我”“发个提醒”“推送结果”等。发送目标与渠道在 DSH 设置 → 通知 页面配置。',
     parameters: {
       type: 'object',
       properties: {
