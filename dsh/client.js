@@ -112,21 +112,35 @@ window.__ModuleLoader__.load({
       switchLabel: { fontSize: '13px', color: 'var(--dsw-alias-label-primary, inherit)' },
       switchDesc: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary, rgba(127,127,127,0.7))' },
       toggle: {
-        appearance: 'none',
-        flex: 'none',
-        margin: 0,
-        width: '36px',
-        height: '20px',
-        borderRadius: '999px',
-        border: '1px solid var(--dsw-alias-border-l2, rgba(128,128,128,0.25))',
-        background: 'var(--dsw-alias-bg-layer-3, rgba(128,128,128,0.1))',
-        position: 'relative',
+        boxSizing: 'border-box',
+        border: '1px solid var(--dsw-alias-border-l2, rgba(217,221,227,0.6))',
+        background: 'var(--dsw-alias-bg-layer-2, rgba(229,231,235,0.5))',
         cursor: 'pointer',
-        transition: 'background .16s, border-color .16s',
+        borderRadius: '999px',
+        flex: 'none',
+        width: '38px',
+        height: '22px',
+        padding: 0,
+        position: 'relative',
+        transition: 'background .15s, border-color .15s',
       },
       toggleChecked: {
-        background: 'var(--dsw-alias-brand, #667eea)',
-        borderColor: 'var(--dsw-alias-brand, #667eea)',
+        background: 'var(--dsw-alias-state-success-primary, #16a34a)',
+        borderColor: 'var(--dsw-alias-state-success-primary, #16a34a)',
+      },
+      toggleKnob: {
+        background: '#fff',
+        borderRadius: '999px',
+        width: '16px',
+        height: '16px',
+        position: 'absolute',
+        top: '2px',
+        left: '2px',
+        boxShadow: '0 1px 2px rgba(0,0,0,0.25)',
+        transition: 'left .15s',
+      },
+      toggleKnobOn: {
+        left: '18px',
       },
       btn: {
         padding: '8px 14px',
@@ -152,14 +166,19 @@ window.__ModuleLoader__.load({
     // ---- toggle switch component ------------------------------------------------
 
     function Toggle(props) {
-      return React.createElement('input', {
-        type: 'checkbox',
-        role: 'switch',
-        style: Object.assign({}, styles.toggle, props.checked ? styles.toggleChecked : {}),
-        checked: props.checked,
-        disabled: props.disabled,
-        onChange: props.onChange,
-      })
+      return React.createElement(
+        'button',
+        {
+          type: 'button',
+          role: 'switch',
+          'aria-checked': props.checked === true,
+          'aria-label': props.label,
+          disabled: props.disabled,
+          onClick: props.onChange,
+          style: Object.assign({}, styles.toggle, props.checked ? styles.toggleChecked : {}, props.disabled ? { opacity: 0.5, cursor: 'default' } : {}),
+        },
+        React.createElement('span', { style: Object.assign({}, styles.toggleKnob, props.checked ? styles.toggleKnobOn : {}) }),
+      )
     }
 
     // ---- settings helpers -------------------------------------------------------
