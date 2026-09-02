@@ -626,11 +626,17 @@ window.__ModuleLoader__.load({
 
         var setField = function (key, value) { return setDraft(function (d) { return Object.assign({}, d, (_h = {}, _h[key] = value, _h)); var _h }) }
 
+        var autoSave = function (key, value) {
+          setField(key, value)
+          scope.set(key, value).catch(function () {})
+        }
+
         var toggleChannel = function (id) {
           setDraft(function (d) {
             var next = d.enabledNotifiers.includes(id)
               ? d.enabledNotifiers.filter(function (x) { return x !== id })
               : d.enabledNotifiers.concat([id])
+            autoSave('enabledNotifiers', next)
             return Object.assign({}, d, { enabledNotifiers: next })
           })
         }
@@ -759,7 +765,7 @@ window.__ModuleLoader__.load({
               React.createElement(Toggle, {
                 checked: draft.enabled,
                 disabled: !writable,
-                onChange: function () { setField('enabled', !draft.enabled) },
+                onChange: function () { autoSave('enabled', !draft.enabled) },
               }),
             ),
             React.createElement(
@@ -770,7 +776,7 @@ window.__ModuleLoader__.load({
               React.createElement(Toggle, {
                 checked: draft.browserNotify,
                 disabled: !writable,
-                onChange: function () { setField('browserNotify', !draft.browserNotify) },
+                onChange: function () { autoSave('browserNotify', !draft.browserNotify) },
               }),
             ),
             draft.browserNotify ? React.createElement('div', null,
@@ -781,7 +787,7 @@ window.__ModuleLoader__.load({
                 React.createElement(Toggle, {
                   checked: draft.onRunEnd,
                   disabled: !writable,
-                  onChange: function () { setField('onRunEnd', !draft.onRunEnd) },
+                  onChange: function () { autoSave('onRunEnd', !draft.onRunEnd) },
                 }),
               ),
               React.createElement(
@@ -791,7 +797,7 @@ window.__ModuleLoader__.load({
                 React.createElement(Toggle, {
                   checked: draft.onQuestion,
                   disabled: !writable,
-                  onChange: function () { setField('onQuestion', !draft.onQuestion) },
+                  onChange: function () { autoSave('onQuestion', !draft.onQuestion) },
                 }),
               ),
               React.createElement(
@@ -801,7 +807,7 @@ window.__ModuleLoader__.load({
                 React.createElement(Toggle, {
                   checked: draft.onApproval,
                   disabled: !writable,
-                  onChange: function () { setField('onApproval', !draft.onApproval) },
+                  onChange: function () { autoSave('onApproval', !draft.onApproval) },
                 }),
               ),
               React.createElement(
@@ -811,7 +817,7 @@ window.__ModuleLoader__.load({
                 React.createElement(Toggle, {
                   checked: draft.sound,
                   disabled: !writable,
-                  onChange: function () { setField('sound', !draft.sound) },
+                  onChange: function () { autoSave('sound', !draft.sound) },
                 }),
               ),
               React.createElement(
@@ -861,7 +867,7 @@ window.__ModuleLoader__.load({
                   type: 'checkbox',
                   checked: draft.notifyOnGoalComplete === true,
                   disabled: !writable,
-                  onChange: function () { setField('notifyOnGoalComplete', !draft.notifyOnGoalComplete) },
+                  onChange: function () { autoSave('notifyOnGoalComplete', !draft.notifyOnGoalComplete) },
                   style: { margin: 0 },
                 }),
                 '目标完成时自动通知',
